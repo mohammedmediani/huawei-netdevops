@@ -13,6 +13,7 @@ jobs:
     env:
       HUAWEICLOUD_SDK_AK: ${{ secrets.HUAWEICLOUD_SDK_AK }}
       HUAWEICLOUD_SDK_SK: ${{ secrets.HUAWEICLOUD_SDK_SK }}
+      ENABLE_HUAWEICLOUD_DEPLOY: ${{ vars.ENABLE_HUAWEICLOUD_DEPLOY || 'false' }}
 
     steps:
       # ── Step 1: Checkout repository ───────────────────────────────────────
@@ -31,14 +32,30 @@ jobs:
           pip install --upgrade pip
           pip install -r requirements.txt
 
-      # ── Step 4: Deploy firewall rules from network_config.yaml ────────────
+      # ── Step 4: Validate YAML config when live deploy is disabled ─────────
+      - name: Validate network_config.yaml
+        if: env.ENABLE_HUAWEICLOUD_DEPLOY != 'true'
+        run: |
+          python - <<'PY'
+          import yaml
+          with open("network_config.yaml", "r", encoding="utf-8") as f:
+              config = yaml.safe_load(f)
+          assert isinstance(config, dict), "network_config.yaml must define a YAML object"
+          assert "vpc" in config and "security_group" in config, "Missing required top-level keys"
+          assert "inbound_rules" in config["security_group"], "security_group.inbound_rules is required"
+          print("network_config.yaml validation passed.")
+          PY
+
+      # ── Step 5: Deploy firewall rules from network_config.yaml ────────────
       - name: Deploy YAML Architecture (VPC & Security Group Rules)
+        if: env.ENABLE_HUAWEICLOUD_DEPLOY == 'true'
         run: |
           echo "=== NetDevOps Deployment Phase ==="
           python deploy_yaml_architecture.py
 
-      # ── Step 5: DevSecOps Compliance Audit ────────────────────────────────
+      # ── Step 6: DevSecOps Compliance Audit ────────────────────────────────
       - name: Run DevSecOps Compliance Audit
+        if: env.ENABLE_HUAWEICLOUD_DEPLOY == 'true'
         run: |
           echo "=== DevSecOps Compliance Audit Phase ==="
           python test_compliance.py
