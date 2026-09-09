@@ -25,19 +25,42 @@ jobs:
         with:
           python-version: "3.11"
 
-      # ── Step 3: Install Huawei Cloud SDK & PyYAML ─────────────────────────
+      # ── Step 3: Install dependencies ──────────────────────────────────────
       - name: Install Dependencies
         run: |
           pip install --upgrade pip
           pip install -r requirements.txt
 
-      # ── Step 4: Deploy firewall rules from network_config.yaml ────────────
+      # ── Step 4: Pre-flight — validate secrets are present in runner ───────
+      - name: Pre-flight Credential Validation
+        run: |
+          echo "=== Validating Huawei Cloud credentials in runner environment ==="
+
+          if [ -z "${HUAWEICLOUD_SDK_AK}" ]; then
+            echo "❌ ERROR: HUAWEICLOUD_SDK_AK secret is missing or empty."
+            echo "   Fix: Settings → Secrets and variables → Actions → New repository secret"
+            exit 1
+          fi
+
+          if [ -z "${HUAWEICLOUD_SDK_SK}" ]; then
+            echo "❌ ERROR: HUAWEICLOUD_SDK_SK secret is missing or empty."
+            echo "   Fix: Settings → Secrets and variables → Actions → New repository secret"
+            exit 1
+          fi
+
+          AK_LEN=${#HUAWEICLOUD_SDK_AK}
+          SK_LEN=${#HUAWEICLOUD_SDK_SK}
+          echo "✅ HUAWEICLOUD_SDK_AK is set (${AK_LEN} chars)"
+          echo "✅ HUAWEICLOUD_SDK_SK is set (${SK_LEN} chars)"
+          echo "Pre-flight passed. Proceeding to deployment."
+
+      # ── Step 5: Deploy firewall rules from network_config.yaml ────────────
       - name: Deploy YAML Architecture (VPC & Security Group Rules)
         run: |
           echo "=== NetDevOps Deployment Phase ==="
           python deploy_yaml_architecture.py
 
-      # ── Step 5: DevSecOps Compliance Audit ────────────────────────────────
+      # ── Step 6: DevSecOps Compliance Audit ────────────────────────────────
       - name: Run DevSecOps Compliance Audit
         run: |
           echo "=== DevSecOps Compliance Audit Phase ==="
