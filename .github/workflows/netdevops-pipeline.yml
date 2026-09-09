@@ -19,6 +19,15 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
+      # ── Step 1.5: Decide execution mode (live deploy vs offline validation)
+      - name: Select Pipeline Mode
+        run: |
+          if [ "${{ vars.ENABLE_HUAWEICLOUD_DEPLOY }}" = "true" ]; then
+            echo "🚀 ENABLE_HUAWEICLOUD_DEPLOY=true — running live Huawei deployment and audit."
+          else
+            echo "🧪 ENABLE_HUAWEICLOUD_DEPLOY is not true — running offline YAML validation only."
+          fi
+
       # ── Step 2: Set up Python runtime ─────────────────────────────────────
       - name: Set Up Python 3.11
         uses: actions/setup-python@v5
@@ -33,6 +42,7 @@ jobs:
 
       # ── Step 4: Pre-flight — validate secrets are present in runner ───────
       - name: Pre-flight Credential Validation
+        if: ${{ vars.ENABLE_HUAWEICLOUD_DEPLOY == 'true' }}
         run: |
           echo "=== Validating Huawei Cloud credentials in runner environment ==="
 
@@ -56,12 +66,37 @@ jobs:
 
       # ── Step 5: Deploy firewall rules from network_config.yaml ────────────
       - name: Deploy YAML Architecture (VPC & Security Group Rules)
+        if: ${{ vars.ENABLE_HUAWEICLOUD_DEPLOY == 'true' }}
         run: |
           echo "=== NetDevOps Deployment Phase ==="
           python deploy_yaml_architecture.py
 
       # ── Step 6: DevSecOps Compliance Audit ────────────────────────────────
       - name: Run DevSecOps Compliance Audit
+        if: ${{ vars.ENABLE_HUAWEICLOUD_DEPLOY == 'true' }}
         run: |
           echo "=== DevSecOps Compliance Audit Phase ==="
           python test_compliance.py
+
+      # ── Step 7: Offline validation path when live deploy is disabled ──────
+      - name: Validate network_config.yaml policy (offline)
+        if: ${{ vars.ENABLE_HUAWEICLOUD_DEPLOY != 'true' }}
+        run: |
+          python - <<'PY'
+          import yaml
+
+          with open("network_config.yaml", "r", encoding="utf-8") as f:
+            config = yaml.safe_load(f)
+
+          rules = config["security_group"]["inbound_rules"]
+          ports = {rule["port"] for rule in rules}
+
+          required = {22, 80, 443}
+          missing = sorted(required - ports)
+          if missing:
+            raise SystemExit(f"Missing required inbound ports in network_config.yaml: {missing}")
+          if 23 in ports:
+            raise SystemExit("Insecure Telnet port 23 must not be present in network_config.yaml")
+
+          print("✅ Offline YAML validation passed: ports 22/80/443 present, 23 absent.")
+          PY
