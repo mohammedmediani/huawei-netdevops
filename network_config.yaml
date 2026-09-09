@@ -1,0 +1,16 @@
+vpc:
+  name: "emsi_production_vpc"
+  cidr: "10.0.0.0/16"
+
+security_group:
+  name: "cloud_firewall_usg"
+  inbound_rules:
+    - port: 22
+      protocol: "tcp"
+      description: "Allow SSH Administration"
+    - port: 80
+      protocol: "tcp"
+      description: "Allow HTTP Web Traffic"
+    - port: 443
+      protocol: "tcp"
+      description: "Allow HTTPS Secure Traffic"

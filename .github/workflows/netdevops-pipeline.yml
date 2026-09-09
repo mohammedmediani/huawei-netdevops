@@ -1,0 +1,44 @@
+name: NetDevOps CI/CD Pipeline — Huawei Cloud
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy-and-audit:
+    name: Deploy Infrastructure & Run DevSecOps Audit
+    runs-on: ubuntu-latest
+
+    env:
+      HUAWEICLOUD_SDK_AK: ${{ secrets.HUAWEICLOUD_SDK_AK }}
+      HUAWEICLOUD_SDK_SK: ${{ secrets.HUAWEICLOUD_SDK_SK }}
+
+    steps:
+      # ── Step 1: Checkout repository ───────────────────────────────────────
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      # ── Step 2: Set up Python runtime ─────────────────────────────────────
+      - name: Set Up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      # ── Step 3: Install Huawei Cloud SDK & PyYAML ─────────────────────────
+      - name: Install Dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+
+      # ── Step 4: Deploy firewall rules from network_config.yaml ────────────
+      - name: Deploy YAML Architecture (VPC & Security Group Rules)
+        run: |
+          echo "=== NetDevOps Deployment Phase ==="
+          python deploy_yaml_architecture.py
+
+      # ── Step 5: DevSecOps Compliance Audit ────────────────────────────────
+      - name: Run DevSecOps Compliance Audit
+        run: |
+          echo "=== DevSecOps Compliance Audit Phase ==="
+          python test_compliance.py
