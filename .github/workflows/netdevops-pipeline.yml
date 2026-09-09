@@ -13,6 +13,7 @@ jobs:
     env:
       HUAWEICLOUD_SDK_AK: ${{ secrets.HUAWEICLOUD_SDK_AK }}
       HUAWEICLOUD_SDK_SK: ${{ secrets.HUAWEICLOUD_SDK_SK }}
+      ENABLE_HUAWEICLOUD_DEPLOY: ${{ vars.ENABLE_HUAWEICLOUD_DEPLOY }}
 
     steps:
       # ── Step 1: Checkout repository ───────────────────────────────────────
@@ -31,14 +32,41 @@ jobs:
           pip install --upgrade pip
           pip install -r requirements.txt
 
+      # ── Step 4: Check whether live cloud deployment is enabled ──────────────
+      - name: Check Deployment Prerequisites
+        id: deploy_gate
+        run: |
+          if [ "${ENABLE_HUAWEICLOUD_DEPLOY}" != "true" ]; then
+            echo "::warning::Live Huawei Cloud deployment is disabled. Set repository variable ENABLE_HUAWEICLOUD_DEPLOY=true to enable this job."
+            echo "should_deploy=false" >> "$GITHUB_OUTPUT"
+          elif [ -z "${HUAWEICLOUD_SDK_AK}" ] || [ -z "${HUAWEICLOUD_SDK_SK}" ]; then
+            echo "::warning::Huawei Cloud credentials are missing. Configure HUAWEICLOUD_SDK_AK/HUAWEICLOUD_SDK_SK secrets to enable deployment."
+            echo "should_deploy=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "should_deploy=true" >> "$GITHUB_OUTPUT"
+          fi
+
       # ── Step 4: Deploy firewall rules from network_config.yaml ────────────
       - name: Deploy YAML Architecture (VPC & Security Group Rules)
+        if: steps.deploy_gate.outputs.should_deploy == 'true'
         run: |
           echo "=== NetDevOps Deployment Phase ==="
           python deploy_yaml_architecture.py
 
       # ── Step 5: DevSecOps Compliance Audit ────────────────────────────────
       - name: Run DevSecOps Compliance Audit
+        if: steps.deploy_gate.outputs.should_deploy == 'true'
         run: |
           echo "=== DevSecOps Compliance Audit Phase ==="
           python test_compliance.py
+
+      # ── Step 6: Validate network config when deployment is skipped ─────────
+      - name: Validate Network Configuration File
+        if: steps.deploy_gate.outputs.should_deploy != 'true'
+        run: |
+          python - <<'PY'
+          import yaml
+          with open("network_config.yaml", "r", encoding="utf-8") as f:
+              yaml.safe_load(f)
+          print("network_config.yaml is valid YAML.")
+          PY
